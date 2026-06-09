@@ -57,3 +57,47 @@ export function formatDate(dateStr: string): string {
     return dateStr;
   }
 }
+
+/**
+ * Calculates a client's age based on their birth date and the current system date.
+ */
+export function calculateAge(birthDateStr: string): number {
+  if (!birthDateStr) return 0;
+  const birthDate = new Date(birthDateStr + "T00:00:00");
+  const today = getSystemDate();
+  
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+}
+
+/**
+ * Calculates Basal Metabolic Rate (BMR) using Mifflin-St Jeor formula:
+ * Men: BMR = (10 * weight in kg) + (6.25 * height in cm) - (5 * age) + 5
+ * Women: BMR = (10 * weight in kg) + (6.25 * height in cm) - (5 * age) - 161
+ * Other / Default: midway adjustment (BMR = (10 * weight in kg) + (6.25 * height in cm) - (5 * age) - 78)
+ */
+export function calculateBMR(
+  gender: "male" | "female" | "other" | undefined,
+  weightKg: number | undefined,
+  heightCm: number | undefined,
+  birthDateStr: string | undefined
+): number | null {
+  if (!weightKg || !heightCm || !birthDateStr) return null;
+  const age = calculateAge(birthDateStr);
+  if (age < 0) return null;
+
+  const baseBMR = (10 * weightKg) + (6.25 * heightCm) - (5 * age);
+  
+  if (gender === "male") {
+    return Math.round(baseBMR + 5);
+  } else if (gender === "female") {
+    return Math.round(baseBMR - 161);
+  } else {
+    // Other (using default average/middle ground)
+    return Math.round(baseBMR - 78);
+  }
+}

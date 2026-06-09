@@ -1,17 +1,26 @@
 import React, { useState, useMemo } from "react";
-import { TrendingUp, Dumbbell, Calendar, ChevronDown, Sparkles, Award, ArrowUpRight, Scale, Info } from "lucide-react";
+import { TrendingUp, Dumbbell, Calendar, ChevronDown, Sparkles, Award, ArrowUpRight, Scale, Info, Edit3, Copy, Download } from "lucide-react";
 import { Client, SessionLog, ExerciseLog, WorkoutSet } from "../types";
 import { formatDate } from "../utils";
+import { jsPDF } from "jspdf";
 
 interface VisualAnalyticsProps {
   clients: Client[];
   sessions: SessionLog[];
   preSelectedClient: Client | null;
+  onEditSession?: (session: SessionLog) => void;
+  onDuplicateSession?: (session: SessionLog) => void;
 }
 
 type MetricType = "1rm" | "volume" | "weight";
 
-export default function VisualAnalytics({ clients, sessions, preSelectedClient }: VisualAnalyticsProps) {
+export default function VisualAnalytics({ 
+  clients, 
+  sessions, 
+  preSelectedClient,
+  onEditSession,
+  onDuplicateSession
+}: VisualAnalyticsProps) {
   const [selectedClientId, setSelectedClientId] = useState<string>(() => {
     if (preSelectedClient) return preSelectedClient.id;
     return clients[0]?.id || "";
@@ -132,6 +141,324 @@ export default function VisualAnalytics({ clients, sessions, preSelectedClient }
     return { min, max, latest: latestVal, change };
   }, [chartDataPoints]);
 
+  const handleExportWorkoutHistoryPDF = () => {
+    if (!client) return;
+
+    try {
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      // 1. HEADER BANNER
+      doc.setFillColor(28, 58, 39); // Deep Forest Green #1C3A27
+      doc.rect(0, 0, 210, 38, "F");
+
+      // Title
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(20);
+      doc.text("Fit with Diana", 15, 16);
+
+      // Subtitle
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(162, 235, 183); // Mint highlight #A2EBB7
+      doc.text("WORKOUT HISTORY & PROGRESSION SCHEMES", 15, 23);
+
+      doc.setFontSize(8);
+      doc.setTextColor(230, 240, 230);
+      doc.text(`Generated: ${new Date().toLocaleDateString()}  |  Trainer Assessment Report`, 15, 30);
+
+      let y = 48;
+
+      // 2. CLIENT INDOBOX (Biometrics & Briefing)
+      doc.setFillColor(248, 247, 243); // warm light off-white background
+      doc.roundedRect(15, y, 180, 36, 4, 4, "F");
+      doc.setDrawColor(230, 226, 215);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(15, y, 180, 36, 4, 4, "S");
+
+      doc.setTextColor(28, 58, 39);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text(`COACH PROFILE: ${client.name.toUpperCase()}`, 20, y + 6);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(80, 80, 80);
+      doc.text(`Primary Phone: ${client.phone}`, 20, y + 13);
+      doc.text(`Start Date: ${formatDate(client.startDate)}`, 20, y + 18);
+      doc.text(`Active Balance: ${client.remainingSessions} of ${client.subscriptionType} sessions left`, 20, y + 23);
+
+      // Render some biometrics if available
+      doc.text(`Gender: ${client.gender ? client.gender.toUpperCase() : "N/A"}`, 105, y + 13);
+      doc.text(`Height: ${client.height ? client.height + " cm" : "N/A"}`, 105, y + 18);
+      doc.text(`Weight: ${client.weight ? client.weight + " kg" : "N/A"}`, 105, y + 23);
+
+      if (client.notes) {
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(8);
+        doc.setTextColor(110, 110, 110);
+        const truncatedNotes = client.notes.length > 95 ? client.notes.substring(0, 92) + "..." : client.notes;
+        doc.text(`Trainer Cues: "${truncatedNotes}"`, 20, y + 30);
+      }
+
+      y += 46;
+
+      if (clientSessions.length === 0) {
+        // No session logs handle
+        doc.setTextColor(110, 110, 110);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.text("NO STRUCTURAL WORKOUTS RECORDED YET", 15, y + 10);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9.5);
+        doc.text("There are no session history logs logged for this client inside the coach console.", 15, y + 17);
+        doc.text("Verify your records or log a session in the 'Clients' directory to enable dynamic PDF tracking.", 15, y + 23);
+        doc.save(`${client.name.replace(/\s+/g, "_")}_workout_history.pdf`);
+        return;
+      }
+
+      // Group data points by exercise
+      // unique exercise names actually done
+      const performedExercisesSet = new Set<string>();
+      clientSessions.forEach((s) => {
+        s.exercises.forEach((ex) => {
+          if (ex.exerciseName.trim()) {
+            performedExercisesSet.add(ex.exerciseName.trim());
+          }
+        });
+      });
+      const performedExercises = Array.from(performedExercisesSet);
+
+      if (performedExercises.length === 0) {
+        doc.setTextColor(110, 110, 110);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.text("No specific named exercises with weight sets have been recorded yet in these sessions.", 15, y + 10);
+        doc.save(`${client.name.replace(/\s+/g, "_")}_workout_history.pdf`);
+        return;
+      }
+
+      // Draw each exercise's progression
+      performedExercises.forEach((exName, exIndex) => {
+        // Filter points for this specific exercise
+        const exPoints: {
+          date: string;
+          oneRM: number;
+          volume: number;
+          peak: number;
+          setsDetail: string;
+        }[] = [];
+
+        clientSessions.forEach((session) => {
+          const matchedEx = session.exercises.find(
+            (ex) => ex.exerciseName.toLowerCase().trim() === exName.toLowerCase().trim()
+          );
+          if (matchedEx && matchedEx.sets.length > 0) {
+            const oneRM = calcEstimated1RM(matchedEx.sets);
+            const volume = calcTotalVolume(matchedEx.sets);
+            const peak = calcPeakWeight(matchedEx.sets);
+            const setsDetail = matchedEx.sets.map((s, idx) => `${s.weight}kg x ${s.reps}r`).join(", ");
+            exPoints.push({
+              date: session.date,
+              oneRM,
+              volume,
+              peak,
+              setsDetail
+            });
+          }
+        });
+
+        if (exPoints.length === 0) return;
+
+        // Check if we need to add a new page
+        const heightNeeded = exPoints.length >= 2 ? 65 + exPoints.length * 6.5 : 30 + exPoints.length * 6.5;
+        if (y + heightNeeded > 280) {
+          doc.addPage();
+          // Subsequent page banner header
+          doc.setFillColor(28, 58, 39);
+          doc.rect(0, 0, 210, 12, "F");
+          doc.setTextColor(255, 255, 255);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(8.5);
+          doc.text(`Fit with Diana  |  Workout History Progress Report: ${client.name}`, 15, 8);
+          y = 20;
+        }
+
+        // Section Title
+        doc.setFillColor(242, 240, 234);
+        doc.rect(15, y, 180, 8, "F");
+        doc.setFillColor(28, 58, 39);
+        doc.rect(15, y, 1.2, 8, "F"); // nice green flag decoration
+
+        doc.setTextColor(28, 58, 39);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9.5);
+        doc.text(`${exIndex + 1}. ${exName.toUpperCase()} PROGRESSION ANALYSIS`, 18, y + 5.5);
+
+        y += 13;
+
+        // Draw Line Chart if >= 2 points
+        if (exPoints.length >= 2) {
+          const chartX = 25;
+          const chartY = y;
+          const chartW = 160;
+          const chartH = 24;
+
+          const oneRMValues = exPoints.map((p) => p.oneRM);
+          const minEst = Math.min(...oneRMValues);
+          const maxEst = Math.max(...oneRMValues);
+          
+          const minValBound = Math.max(0, Math.floor(minEst * 0.95));
+          const maxValBound = Math.ceil(maxEst * 1.05) === minValBound ? minValBound + 10 : Math.ceil(maxEst * 1.05);
+          const valRangeBound = maxValBound - minValBound || 10;
+
+          // Draw baseline axis & grid line bounds
+          doc.setDrawColor(230, 226, 215);
+          doc.setLineWidth(0.25);
+          doc.line(chartX, chartY, chartX + chartW, chartY); // top border
+          doc.line(chartX, chartY + chartH, chartX + chartW, chartY + chartH); // base axis
+
+          // print max bound label on axis
+          doc.setFontSize(7);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(140, 140, 140);
+          doc.text(`${maxValBound}kg`, chartX - 3, chartY + 2.5, { align: "right" });
+          doc.text(`${minValBound}kg`, chartX - 3, chartY + chartH, { align: "right" });
+
+          // Label center grid
+          const midValue = parseFloat((minValBound + valRangeBound / 2).toFixed(1));
+          doc.line(chartX, chartY + chartH / 2, chartX + chartW, chartY + chartH / 2);
+          doc.text(`${midValue}kg`, chartX - 3, chartY + chartH / 2 + 1, { align: "right" });
+
+          // Plot points of chart
+          const coordinates = exPoints.map((pt, index) => {
+            const cx = chartX + (index / (exPoints.length - 1)) * chartW;
+            const relativeValue = (pt.oneRM - minValBound) / valRangeBound;
+            const cy = chartY + chartH - relativeValue * chartH;
+            return { cx, cy, pt };
+          });
+
+          // Draw continuous progress path
+          doc.setDrawColor(28, 58, 39);
+          doc.setLineWidth(0.8);
+          for (let i = 0; i < coordinates.length - 1; i++) {
+            doc.line(coordinates[i].cx, coordinates[i].cy, coordinates[i+1].cx, coordinates[i+1].cy);
+          }
+
+          // Draw small solid dot markers and text labels
+          coordinates.forEach((coord, idx) => {
+            // Draw dot
+            doc.setFillColor(255, 255, 255);
+            doc.setDrawColor(28, 58, 39);
+            doc.setLineWidth(0.5);
+            doc.circle(coord.cx, coord.cy, 1.2, "FD");
+
+            // Dot value labeller (skip to prevent cram if too many entries)
+            const shouldLabel = coordinates.length < 12 || idx === 0 || idx === coordinates.length - 1 || idx % 2 === 0;
+            if (shouldLabel) {
+              doc.setFontSize(6.5);
+              doc.setFont("helvetica", "bold");
+              doc.setTextColor(28, 58, 39);
+              doc.text(`${coord.pt.oneRM}kg`, coord.cx, coord.cy - 2.5, { align: "center" });
+
+              // Draw date marker on bottom axis
+              doc.setFontSize(6);
+              doc.setFont("helvetica", "normal");
+              doc.setTextColor(140, 140, 140);
+              const customDateStr = coord.pt.date.substring(5); // e.g. 12-25
+              doc.text(customDateStr, coord.cx, chartY + chartH + 4, { align: "center" });
+            }
+          });
+
+          y += chartH + 11;
+        } else {
+          doc.setFillColor(248, 247, 243);
+          doc.rect(15, y, 180, 12, "F");
+          doc.setFontSize(8.5);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(80, 80, 80);
+          doc.text(`Initial performance recorded on ${formatDate(exPoints[0].date)}:  ${exPoints[0].oneRM}kg (Estimated 1RM). Multiple entries will generate a timeline chart.`, 20, y + 7.5);
+          y += 16;
+        }
+
+        // Draw sub table headers
+        doc.setFillColor(28, 58, 39);
+        doc.rect(15, y, 180, 7, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7.5);
+        doc.text("Date Logged", 20, y + 4.8);
+        doc.text("Estimated 1RM", 52, y + 4.8);
+        doc.text("Peak Weight", 85, y + 4.8);
+        doc.text("Total Volume", 115, y + 4.8);
+        doc.text("Sets Execution Logs", 145, y + 4.8);
+
+        y += 7;
+
+        exPoints.forEach((point) => {
+          if (y + 8 > 280) {
+            doc.addPage();
+            // Subsequent page banner header
+            doc.setFillColor(28, 58, 39);
+            doc.rect(0, 0, 210, 12, "F");
+            doc.setTextColor(255, 255, 255);
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(8.5);
+            doc.text(`Fit with Diana  |  Workout History Progress Report: ${client.name}`, 15, 8);
+            y = 20;
+
+            // Reprint columns row headers
+            doc.setFillColor(28, 58, 39);
+            doc.rect(15, y, 180, 7, "F");
+            doc.setTextColor(255, 255, 255);
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(7.5);
+            doc.text("Date Logged", 20, y + 4.8);
+            doc.text("Estimated 1RM", 52, y + 4.8);
+            doc.text("Peak Weight", 85, y + 4.8);
+            doc.text("Total Volume", 115, y + 4.8);
+            doc.text("Sets Execution Logs", 145, y + 4.8);
+            y += 7;
+          }
+
+          // Subtle background grid cell row borders
+          doc.setFillColor(252, 251, 248);
+          doc.rect(15, y, 180, 6.5, "F");
+          doc.setDrawColor(240, 237, 230);
+          doc.setLineWidth(0.2);
+          doc.line(15, y + 6.5, 195, y + 6.5);
+
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(7.5);
+          doc.setTextColor(80, 80, 80);
+          doc.text(formatDate(point.date), 20, y + 4.2);
+          doc.text(`${point.oneRM} kg`, 52, y + 4.2);
+          doc.text(`${point.peak} kg`, 85, y + 4.2);
+          doc.text(`${point.volume} kg`, 115, y + 4.2);
+
+          // Sub sets execution log
+          doc.setFont("monospace", "normal");
+          doc.setFontSize(7);
+          doc.text(point.setsDetail, 145, y + 4.2);
+
+          y += 6.5;
+        });
+
+        y += 10; // extra padding between exercise sections
+      });
+
+      // Save PDF document
+      const fileSuffix = client.name.toLowerCase().replace(/\s+/g, "_");
+      doc.save(`Diana_Fitness_${fileSuffix}_progress_report.pdf`);
+    } catch (err) {
+      console.error("Failed to compile or save visual workout PDF report", err);
+    }
+  };
+
   // Layout math parameters for SVG viewbox width=600 height=260
   const width = 600;
   const height = 240;
@@ -210,7 +537,7 @@ export default function VisualAnalytics({ clients, sessions, preSelectedClient }
       
       {/* SELECTION CRITERIA DRUM */}
       <div className="bg-card border border-muted-border/30 rounded-3xl p-6 shadow-soft">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
           
           {/* 1. Client Select */}
           <div>
@@ -299,6 +626,21 @@ export default function VisualAnalytics({ clients, sessions, preSelectedClient }
                 Peak Wt.
               </button>
             </div>
+          </div>
+
+          {/* 4. Export PDF Action Button */}
+          <div>
+            <label className="block text-xs font-semibold text-text/60 uppercase tracking-wider mb-1.5 font-sans">
+              Export History Report
+            </label>
+            <button
+              onClick={handleExportWorkoutHistoryPDF}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-accent text-white hover:bg-accent/90 text-xs font-semibold rounded-2xl transition-all shadow-md active:scale-95 h-[38px] font-sans"
+              title="Download client's full exercise progression PDF report"
+            >
+              <Download className="w-4 h-4" />
+              <span>Export PDF</span>
+            </button>
           </div>
 
         </div>
@@ -578,15 +920,37 @@ export default function VisualAnalytics({ clients, sessions, preSelectedClient }
                 className="bg-warm/40 p-4 rounded-2xl border border-muted-border/30 hover:border-muted-border/60 transition-colors"
               >
                 {/* Header row */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2.5 pb-2 border-b border-muted-border/20">
-                  <span className="text-xs font-semibold text-accent font-sans">
-                    Session on {formatDate(session.date)}
-                  </span>
-                  {session.notes && (
-                    <span className="text-[11px] text-text/60 italic">
-                      Notes: {session.notes}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5 pb-2 border-b border-muted-border/20">
+                  <div className="flex-grow">
+                    <span className="text-xs font-semibold text-accent font-sans">
+                      Session on {formatDate(session.date)}
                     </span>
-                  )}
+                    {session.notes && (
+                      <span className="text-[11px] text-text/60 italic block mt-0.5">
+                        Notes: {session.notes}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1.5 sm:mt-0 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onEditSession?.(session)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent text-[11px] font-bold rounded-xl transition-all active:scale-95"
+                      title="Edit this session"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Edit</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDuplicateSession?.(session)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 bg-accent text-white hover:bg-accent/90 text-[11px] font-bold rounded-xl transition-all active:scale-95 shadow-sm"
+                      title="Duplicate this session"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Duplicate</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Exercises logged */}

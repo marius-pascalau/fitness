@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Trash2, Dumbbell, Calendar, ChevronDown, Check, Info, Notebook } from "lucide-react";
+import { Plus, Trash2, Dumbbell, Calendar, ChevronDown, Check, Info, Notebook, AlertTriangle } from "lucide-react";
 import { Client, SessionLog, ExerciseLog, WorkoutSet } from "../types";
 import { getSystemDate } from "../utils";
 
 interface SessionLoggerProps {
   clients: Client[];
   selectedClientFromCard: Client | null;
-  onSaveSession: (session: SessionLog) => void;
+  onSaveSession: (session: SessionLog, isEdit: boolean) => void;
   onCancel: () => void;
+  sessionToEdit?: SessionLog | null;
+  sessionToDuplicate?: SessionLog | null;
 }
 
 const COMMON_EXERCISES = [
@@ -27,7 +29,9 @@ export default function SessionLogger({
   clients,
   selectedClientFromCard,
   onSaveSession,
-  onCancel
+  onCancel,
+  sessionToEdit,
+  sessionToDuplicate
 }: SessionLoggerProps) {
   // Pre-selected client or first available active client
   const [selectedClientId, setSelectedClientId] = useState("");
@@ -36,36 +40,61 @@ export default function SessionLogger({
   const [exercises, setExercises] = useState<ExerciseLog[]>([]);
   const [customExerciseName, setCustomExerciseName] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Initialize form details
   useEffect(() => {
-    // Default date YYYY-MM-DD
     const systemDate = getSystemDate();
     const year = systemDate.getFullYear();
     const month = String(systemDate.getMonth() + 1).padStart(2, "0");
     const day = String(systemDate.getDate()).padStart(2, "0");
-    setDate(`${year}-${month}-${day}`);
+    const todayStr = `${year}-${month}-${day}`;
 
-    if (selectedClientFromCard) {
-      setSelectedClientId(selectedClientFromCard.id);
+    if (sessionToEdit) {
+      // Edit Mode
+      setSelectedClientId(sessionToEdit.clientId);
+      setDate(sessionToEdit.date);
+      setNotes(sessionToEdit.notes || "");
+      setExercises(JSON.parse(JSON.stringify(sessionToEdit.exercises)));
+    } else if (sessionToDuplicate) {
+      // Duplicate Mode - deep cloning sets with fresh React keys
+      setSelectedClientId(sessionToDuplicate.clientId);
+      setDate(todayStr);
+      setNotes(sessionToDuplicate.notes || "");
+      const freshExercises = sessionToDuplicate.exercises.map((ex) => ({
+        ...ex,
+        id: "ex-" + Date.now() + "-" + Math.random().toString(36).substr(2, 4),
+        sets: ex.sets.map((set) => ({
+          ...set,
+          id: "set-" + Date.now() + "-" + Math.random().toString(36).substr(2, 4)
+        }))
+      }));
+      setExercises(freshExercises);
     } else {
-      const activeWithSessions = clients.find((c) => c.remainingSessions > 0);
-      if (activeWithSessions) {
-        setSelectedClientId(activeWithSessions.id);
-      } else if (clients.length > 0) {
-        setSelectedClientId(clients[0].id);
-      }
-    }
+      // Create Brand New Mode
+      setDate(todayStr);
+      setNotes("");
 
-    // Start with one blank exercise to make it quick
-    setExercises([
-      {
-        id: "initial-ex",
-        exerciseName: "Squat",
-        sets: [{ id: "s-init-1", weight: 60, reps: 8 }]
+      if (selectedClientFromCard) {
+        setSelectedClientId(selectedClientFromCard.id);
+      } else {
+        const activeWithSessions = clients.find((c) => c.remainingSessions > 0);
+        if (activeWithSessions) {
+          setSelectedClientId(activeWithSessions.id);
+        } else if (clients.length > 0) {
+          setSelectedClientId(clients[0].id);
+        }
       }
-    ]);
-  }, [selectedClientFromCard, clients]);
+
+      setExercises([
+        {
+          id: "initial-ex",
+          exerciseName: "Squat",
+          sets: [{ id: "s-init-1", weight: 60, reps: 8 }]
+        }
+      ]);
+    }
+  }, [selectedClientFromCard, clients, sessionToEdit, sessionToDuplicate]);
 
   const activeClient = clients.find((c) => c.id === selectedClientId);
 
@@ -155,32 +184,45 @@ export default function SessionLogger({
     e.preventDefault();
     if (!selectedClientId) return;
     if (exercises.length === 0) {
-      alert("Please add at least one exercise to save the session.");
+      setError("Please add at least one exercise to save the session.");
       return;
     }
+    setError(null);
 
     // Format final session entry
     const finalSession: SessionLog = {
-      id: "session-" + Date.now(),
+      id: sessionToEdit ? sessionToEdit.id : ("session-" + Date.now()),
       clientId: selectedClientId,
       date,
       notes: notes.trim() || undefined,
       exercises: exercises.filter((ex) => ex.exerciseName.trim() !== "")
     };
 
-    onSaveSession(finalSession);
+    onSaveSession(finalSession, !!sessionToEdit);
   };
+
+  const headerTitle = sessionToEdit
+    ? "Edit Workout Session Log"
+    : sessionToDuplicate
+    ? "Duplicate & Edit Workout Log"
+    : "Log Client Workout Session";
 
   return (
     <div id="session-logger-box" className="bg-card border border-muted-border/30 rounded-3xl p-6 shadow-soft max-w-4xl mx-auto">
       <div className="flex items-center gap-2 pb-4 mb-5 border-b border-muted-border/30">
         <Dumbbell className="w-5 h-5 text-accent" />
         <h2 className="serif text-2xl font-semibold text-accent leading-tight">
-          Log Client Workout Session
+          {headerTitle}
         </h2>
       </div>
 
       <form onSubmit={handleSave} className="space-y-6">
+        {error && (
+          <div className="p-4 bg-alert-coral/10 border border-alert-coral/20 rounded-2xl text-xs text-alert-coral flex items-center gap-2 animate-pulse">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
         
         {/* TOP CONFIGURATION ROW */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -199,14 +241,15 @@ export default function SessionLogger({
             >
               <option value="" disabled>Select a client...</option>
               {clients.map((client) => {
-                const isOutOfSessions = client.remainingSessions <= 0;
+                const isCurrentClientOrEditClient = client.id === selectedClientId || (sessionToEdit && client.id === sessionToEdit.clientId);
+                const isOutOfSessions = client.remainingSessions <= 0 && !isCurrentClientOrEditClient;
                 return (
                   <option 
                     key={client.id} 
                     value={client.id}
                     disabled={isOutOfSessions}
                   >
-                    {client.name} {isOutOfSessions ? "(No Remaining Sessions)" : `(${client.remainingSessions} sessions left)`}
+                    {client.name} {client.remainingSessions <= 0 ? "(No Remaining Sessions)" : `(${client.remainingSessions} sessions left)`}
                   </option>
                 );
               })}
@@ -437,12 +480,16 @@ export default function SessionLogger({
           )}
         </div>
 
-        {/* METRICS SUMMARY HELPER BAR */}
+         {/* METRICS SUMMARY HELPER BAR */}
         <div className="bg-accent/5 p-4 rounded-3xl border border-accent/20 flex items-start gap-3">
           <Info className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
           <div className="text-[11px] text-text/70 leading-relaxed font-sans">
             <span className="font-semibold text-accent block mb-0.5">Trainer Guidance:</span>
-            <span>Saving this completed training log will automatically reduce the remaining subscriber sessions of <b>{activeClient ? activeClient.name : "the selected client"}</b> by <b>1 session</b> and register their progression curves within the diagnostics databases.</span>
+            {sessionToEdit ? (
+              <span>Updating this existing training log will correct the recorded exercises and progression data. This update operates in-place and <b>will NOT decrement</b> any subscriber sessions.</span>
+            ) : (
+              <span>Saving this completed training log will automatically reduce the remaining subscriber sessions of <b>{activeClient ? activeClient.name : "the selected client"}</b> by <b>1 session</b> and register their progression curves within the diagnostics databases.</span>
+            )}
           </div>
         </div>
 
@@ -462,7 +509,13 @@ export default function SessionLogger({
             className="flex items-center gap-1.5 px-5 py-2.5 bg-accent text-white text-xs font-semibold rounded-full hover:bg-accent/90 shadow-soft active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Check className="w-4 h-4" />
-            Save & Decrement Session
+            <span>
+              {sessionToEdit
+                ? "Update Workout Session"
+                : sessionToDuplicate
+                ? "Duplicate & Log Workout"
+                : "Save & Decrement Session"}
+            </span>
           </button>
         </div>
 

@@ -1,5 +1,5 @@
 {
-  "name": "Fitness Client & Subscription Tracker",
+  "name": "Fit with Diana - tracker",
   "description": "A comprehensive client subscription, session, and workout progress tracking application for fitness instructors, including visual analytics and transition warning.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

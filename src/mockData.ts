@@ -10,7 +10,28 @@ export const INITIAL_CLIENTS: Client[] = [
     subscriptionType: 8,
     remainingSessions: 1,
     durationDays: 30,
-    notes: "Focusing on lower body strength and improving cardiovascular stamina."
+    notes: "Focusing on lower body strength and improving cardiovascular stamina.",
+    gender: "female",
+    birthDate: "1994-03-12",
+    height: 165,
+    weight: 61.2,
+    price: 500,
+    subscriptionHistory: [
+      {
+        id: "sub-h1-1",
+        startDate: "2026-04-05",
+        price: 500,
+        sessionCount: 8,
+        dateCreated: "2024-04-05T10:00:00Z"
+      },
+      {
+        id: "sub-h1-2",
+        startDate: "2026-05-05",
+        price: 500,
+        sessionCount: 8,
+        dateCreated: "2026-05-05T09:30:00Z"
+      }
+    ]
   },
   {
     id: "client-2",
@@ -20,7 +41,21 @@ export const INITIAL_CLIENTS: Client[] = [
     subscriptionType: 12,
     remainingSessions: 7,
     durationDays: 30,
-    notes: "Recovering from minor left shoulder impingement. Avoid heavy overhead presses."
+    notes: "Recovering from minor left shoulder impingement. Avoid heavy overhead presses.",
+    gender: "male",
+    birthDate: "1988-11-23",
+    height: 182,
+    weight: 84.5,
+    price: 850,
+    subscriptionHistory: [
+      {
+        id: "sub-h2-1",
+        startDate: "2026-05-15",
+        price: 850,
+        sessionCount: 12,
+        dateCreated: "2026-05-15T11:15:00Z"
+      }
+    ]
   },
   {
     id: "client-3",
@@ -30,7 +65,21 @@ export const INITIAL_CLIENTS: Client[] = [
     subscriptionType: 16,
     remainingSessions: 15,
     durationDays: 30,
-    notes: "Goal: Body recomposition, high intensity hypertrophy splits."
+    notes: "Goal: Body recomposition, high intensity hypertrophy splits.",
+    gender: "male",
+    birthDate: "2001-07-04",
+    height: 178,
+    weight: 79.0,
+    price: 1300,
+    subscriptionHistory: [
+      {
+        id: "sub-h3-1",
+        startDate: "2026-05-29",
+        price: 1300,
+        sessionCount: 16,
+        dateCreated: "2026-05-29T14:00:00Z"
+      }
+    ]
   },
   {
     id: "client-4",
@@ -40,7 +89,21 @@ export const INITIAL_CLIENTS: Client[] = [
     subscriptionType: 8,
     remainingSessions: 0,
     durationDays: 30,
-    notes: "Prefers outdoor athletic circuits combined with barbell main lifts."
+    notes: "Prefers outdoor athletic circuits combined with barbell main lifts.",
+    gender: "female",
+    birthDate: "1996-09-17",
+    height: 168,
+    weight: 58.0,
+    price: 500,
+    subscriptionHistory: [
+      {
+        id: "sub-h4-1",
+        startDate: "2026-04-28",
+        price: 500,
+        sessionCount: 8,
+        dateCreated: "2026-04-28T09:00:00Z"
+      }
+    ]
   }
 ];
 
