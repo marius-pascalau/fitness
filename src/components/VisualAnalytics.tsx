@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { TrendingUp, Dumbbell, Calendar, ChevronDown, Sparkles, Award, ArrowUpRight, Scale, Info, Edit3, Copy, Download } from "lucide-react";
 import { Client, SessionLog, ExerciseLog, WorkoutSet } from "../types";
-import { formatDate } from "../utils";
+import { formatDate, formatSystemDate } from "../utils";
 import { jsPDF } from "jspdf";
 
 interface VisualAnalyticsProps {
@@ -169,7 +169,7 @@ export default function VisualAnalytics({
 
       doc.setFontSize(8);
       doc.setTextColor(230, 240, 230);
-      doc.text(`Generated: ${new Date().toLocaleDateString()}  |  Trainer Assessment Report`, 15, 30);
+      doc.text(`Generated: ${formatSystemDate(new Date())}  |  Trainer Assessment Report`, 15, 30);
 
       let y = 48;
 
@@ -747,6 +747,7 @@ export default function VisualAnalytics({
 
                     return (
                       <g key={idx}>
+                        {/* Visible circle indicator */}
                         <circle
                           cx={pt.x}
                           cy={pt.y}
@@ -754,25 +755,34 @@ export default function VisualAnalytics({
                           fill={isHovered ? "#5A5A40" : "#FFFFFF"}
                           stroke="#5A5A40"
                           strokeWidth={isHovered ? "2.5" : "2"}
-                          className="cursor-pointer transition-all duration-150"
+                          className="pointer-events-none transition-all duration-150"
+                        />
+
+                        {/* Large invisible catch-area for comfortable hover and tap gestures */}
+                        <circle
+                          cx={pt.x}
+                          cy={pt.y}
+                          r="16"
+                          fill="transparent"
+                          className="cursor-pointer"
                           onMouseEnter={() => setHoveredIndex(idx)}
                           onMouseLeave={() => setHoveredIndex(null)}
                         />
 
-                        {/* Date axis label for points (only first, last, and hovered to avoid crowding) */}
-                        {(idx === 0 || idx === svgCoordinates.length - 1 || isHovered) && (
-                          <text
-                            x={pt.x}
-                            y={height - 18}
-                            fill={isHovered ? "#5A5A40" : "#2D2D2A"}
-                            fontSize="9"
-                            fontFamily="monospace"
-                            textAnchor="middle"
-                            className="font-semibold pointer-events-none opacity-60"
-                          >
-                            {pt.date.substring(5)}
-                          </text>
-                        )}
+                        {/* Date axis label for points (displayed on every data point) */}
+                        <text
+                          x={pt.x}
+                          y={height - 18}
+                          fill={isHovered ? "#5A5A40" : "#2D2D2A"}
+                          fontSize="9"
+                          fontFamily="monospace"
+                          textAnchor="middle"
+                          className={`font-semibold pointer-events-none transition-all duration-150 ${
+                            isHovered ? "opacity-100 font-bold" : "opacity-60"
+                          }`}
+                        >
+                          {formatDate(pt.date).substring(0, 5)}
+                        </text>
                       </g>
                     );
                   })}
@@ -780,7 +790,7 @@ export default function VisualAnalytics({
 
                 {/* Floating Tooltip Container inside container */}
                 {hoveredIndex !== null && svgCoordinates[hoveredIndex] && (
-                  <div className="absolute top-2 left-1/2 transform -translate-x-1/2 bg-card border border-muted-border/80 rounded-2xl p-4 shadow-soft text-xs space-y-1 z-20 w-52 max-w-full text-text flex flex-col">
+                  <div className="absolute top-2 left-1/2 transform -translate-x-1/2 bg-card border border-muted-border/80 rounded-2xl p-4 shadow-soft text-xs space-y-1 z-20 w-52 max-w-full text-text flex flex-col pointer-events-none">
                     <div className="flex items-center justify-between">
                       <span className="font-mono text-[9px] text-text/45">{formatDate(svgCoordinates[hoveredIndex].date)}</span>
                       <span className="text-[10px] bg-accent/10 text-accent font-semibold px-2 py-0.5 rounded-full uppercase">

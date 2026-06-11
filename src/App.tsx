@@ -17,6 +17,7 @@ import SubscriptionManagerModal from "./components/SubscriptionManagerModal";
 export default function App() {
   const [clients, setClients] = useState<Client[]>([]);
   const [sessions, setSessions] = useState<SessionLog[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<string>("clients");
   const [clientToEdit, setClientToEdit] = useState<Client | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -41,14 +42,15 @@ export default function App() {
     }
   }, [toast]);
 
-  // Initialize data from local storage or mock
+  // Initialize data from server (falls back to mocks if fetch fails)
   useEffect(() => {
-    const savedClients = localStorage.getItem("fit_tracker_clients_v1");
-    const savedSessions = localStorage.getItem("fit_tracker_sessions_v1");
-
-    if (savedClients) {
+    async function loadServerData() {
       try {
-        const rawList = JSON.parse(savedClients) as Client[];
+        const res = await fetch("/api/data");
+        if (!res.ok) throw new Error("Failed to fetch data from API, status: " + res.status);
+        const data = await res.json();
+        
+        const rawList = (data.clients || []) as Client[];
         const upgradedList = rawList.map((c) => {
           if (!c.subscriptionHistory || c.subscriptionHistory.length === 0) {
             return {
@@ -67,36 +69,42 @@ export default function App() {
           return c;
         });
         setClients(upgradedList);
-        localStorage.setItem("fit_tracker_clients_v1", JSON.stringify(upgradedList));
-      } catch {
+        setSessions(data.sessions || []);
+      } catch (err) {
+        console.error("Failed to load server data, using initials:", err);
         setClients(INITIAL_CLIENTS);
-      }
-    } else {
-      setClients(INITIAL_CLIENTS);
-      localStorage.setItem("fit_tracker_clients_v1", JSON.stringify(INITIAL_CLIENTS));
-    }
-
-    if (savedSessions) {
-      try {
-        setSessions(JSON.parse(savedSessions));
-      } catch {
         setSessions(INITIAL_SESSIONS);
+      } finally {
+        setLoading(false);
       }
-    } else {
-      setSessions(INITIAL_SESSIONS);
-      localStorage.setItem("fit_tracker_sessions_v1", JSON.stringify(INITIAL_SESSIONS));
     }
+    loadServerData();
   }, []);
 
-  // Save updates helper
+  // Sync state helper to write to server
+  const syncToServer = async (newClients: Client[], newSessions: SessionLog[]) => {
+    try {
+      const res = await fetch("/api/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clients: newClients, sessions: newSessions }),
+      });
+      if (!res.ok) throw new Error("Failed to save data. status: " + res.status);
+    } catch (err) {
+      console.error("Error syncing with server data.json:", err);
+      setToast({ text: "Error syncing changes with server.", type: "error" });
+    }
+  };
+
+  // Save updates helpers
   const updateClientsState = (newClients: Client[]) => {
     setClients(newClients);
-    localStorage.setItem("fit_tracker_clients_v1", JSON.stringify(newClients));
+    syncToServer(newClients, sessions);
   };
 
   const updateSessionsState = (newSessions: SessionLog[]) => {
     setSessions(newSessions);
-    localStorage.setItem("fit_tracker_sessions_v1", JSON.stringify(newSessions));
+    syncToServer(clients, newSessions);
   };
 
   // Register or Update a Client
@@ -366,14 +374,22 @@ export default function App() {
   };
 
   // Reset database with smooth custom animation transition
-  const handleResetDatabase = () => {
-    localStorage.removeItem("fit_tracker_clients_v1");
-    localStorage.removeItem("fit_tracker_sessions_v1");
-    setToast({ text: "Database restored to defaults. Reloading tracker...", type: "success" });
-    setIsResetConfirmOpen(false);
-    setTimeout(() => {
-      window.location.reload();
-    }, 1200);
+  const handleResetDatabase = async () => {
+    try {
+      const res = await fetch("/api/reset", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to reset database on server with status: " + res.status);
+      const data = await res.json();
+      setClients(data.clients);
+      setSessions(data.sessions);
+      setToast({ text: "Database restored to defaults on server. Reloading tracker...", type: "success" });
+      setIsResetConfirmOpen(false);
+      setTimeout(() => {
+        window.location.reload();
+      }, 1200);
+    } catch (err) {
+      console.error("Failed to reset server data:", err);
+      setToast({ text: "Failed to reset database on server.", type: "error" });
+    }
   };
 
   const handleTriggerLogWorkout = (client: Client) => {
@@ -444,6 +460,24 @@ export default function App() {
     // Alert triggers if ending soon (within 3 days remaining) or has exactly 0/1 sessions remaining
     return (endingSoon && !expired) || (c.remainingSessions <= 1);
   }).length;
+
+  if (loading) {
+    return (
+      <div id="loading-screen" className="min-h-screen bg-warm text-[#1C3A27] flex flex-col items-center justify-center font-sans">
+        <div className="flex flex-col items-center gap-4">
+          <div className="p-3.5 bg-accent text-white rounded-2xl shadow-soft">
+            <Dumbbell className="w-8 h-8 animate-bounce" />
+          </div>
+          <div className="text-center">
+            <h2 className="serif text-xl font-bold tracking-tight text-accent">Fit with Diana</h2>
+            <p className="text-[11px] uppercase tracking-widest font-bold text-text/50 mt-2">
+              Synchronizing with Coach Database...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div id="application-layout" className="min-h-screen bg-warm text-text font-sans flex flex-col selection:bg-accent/20 selection:text-accent">
@@ -600,8 +634,8 @@ export default function App() {
       {/* CORE INNER WORKSPACE */}
       <main className="flex-grow max-w-7xl w-full mx-auto px-4 py-6">
         
-        {/* OVERHEAD HUD KPIS DISPLAYED ALMOST ALWAYS EXCEPT FOR FOCUSED LOGS */}
-        {activeTab !== "log" && (
+        {/* OVERHEAD HUD KPIS DISPLAYED ONLY FOR THE CLIENT DIRECTORY TAB */}
+        {activeTab === "clients" && (
           <MetricCards
             clients={clients}
             sessions={sessions}

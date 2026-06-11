@@ -43,18 +43,34 @@ export function isSubscriptionEndingSoon(client: Client): { endingSoon: boolean;
 }
 
 /**
- * Format date string directly for UX readability.
+ * Format date string directly for UX readability in dd.MM.yyyy style.
  */
 export function formatDate(dateStr: string): string {
+  if (!dateStr) return "";
   try {
-    const date = new Date(dateStr + "T12:00:00");
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
+    const cleanDateStr = dateStr.includes("T") ? dateStr : `${dateStr}T12:00:00`;
+    const date = new Date(cleanDateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${day}.${month}.${year}`;
   } catch {
     return dateStr;
+  }
+}
+
+/**
+ * Format a Date object as dd.MM.yyyy.
+ */
+export function formatSystemDate(date: Date): string {
+  try {
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${day}.${month}.${year}`;
+  } catch {
+    return "";
   }
 }
 

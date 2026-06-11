@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { Calendar, Search, CreditCard, Download, User, ArrowUpRight, TrendingUp, Sparkles, Receipt, Filter, Trash2 } from "lucide-react";
 import { Client, SubscriptionHistoryEntry } from "../types";
-import { formatDate } from "../utils";
+import { formatDate, formatSystemDate } from "../utils";
 import { jsPDF } from "jspdf";
 
 interface ClientSubscriptionsProps {
@@ -138,7 +138,7 @@ export default function ClientSubscriptions({
       
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(8);
-      doc.text(`Generated: ${new Date().toLocaleDateString()}`, 155, 25);
+      doc.text(`Generated: ${formatSystemDate(new Date())}`, 155, 25);
 
       // Stat cards box backgrounds
       doc.setFillColor(242, 242, 238); // Soft warm background
@@ -389,7 +389,7 @@ export default function ClientSubscriptions({
         <h1 className="serif text-3xl font-bold text-accent">Fitness tracker Instructor Console</h1>
         <h2 className="text-sm uppercase tracking-wider text-text/60 font-semibold mt-1">Chronological Subscriptions Billing Ledger</h2>
         <div className="flex justify-between text-xs text-text/50 mt-4 font-mono">
-          <span>Printed on: {new Date().toLocaleDateString()}</span>
+          <span>Printed on: {formatSystemDate(new Date())}</span>
           <span>Filtered Count: {allSubscriptions.length} cycle entries</span>
           <span>Total Recorded billing: {billingStats.totalRevenue.toLocaleString()}</span>
         </div>

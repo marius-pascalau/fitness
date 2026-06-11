@@ -386,9 +386,14 @@ export default function ClientList({
                         </span>
                       )}
                       {client.birthDate && (
-                        <span className="px-2 py-0.5 bg-white text-[10px] font-bold text-text/80 rounded-lg border border-muted-border/30 tracking-wide">
-                          {calculateAge(client.birthDate)} yrs
-                        </span>
+                        <>
+                          <span className="px-2 py-0.5 bg-white text-[10px] font-bold text-text/80 rounded-lg border border-muted-border/30 tracking-wide">
+                            Born: {formatDate(client.birthDate)}
+                          </span>
+                          <span className="px-2 py-0.5 bg-white text-[10px] font-bold text-text/80 rounded-lg border border-muted-border/30 tracking-wide">
+                            {calculateAge(client.birthDate)} yrs
+                          </span>
+                        </>
                       )}
                       {client.height && (
                         <span className="px-2 py-0.5 bg-white text-[10px] font-bold text-text/80 rounded-lg border border-muted-border/30 tracking-wide">
